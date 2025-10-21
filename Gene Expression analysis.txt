@@ -1,0 +1,95 @@
+> data <- read.csv("F:/combined_RNAs.csv", row.names = 1)
+> idh_mut_samples <- c("DA06", "DA01", "DA05", "GB07")
+> da_samples <- grep("^DA", rownames(data), value = TRUE)
+> da_samples <- setdiff(da_samples, idh_mut_samples)
+> group <- factor(ifelse(rownames(data) %in% idh_mut_samples, "IDH-MUT", "DA"))
+> 
+> dge <- DGEList(counts = t(data), group = group)
+library(edgeR)
+Loading required package: limma
+Warning message:
+package ‘limma’ was built under R version 4.1.3 
+> 
+> dge <- DGEList(counts = t(data), group = group)
+> 
+> keep <- rowMeans(dge$counts) >= 10
+> dge <- dge[keep, , keep.lib.sizes=FALSE]
+> dge <- calcNormFactors(dge)
+> dge <- estimateDisp(dge)
+Using classic mode.
+> 
+> de_results <- exactTest(dge, pair = c("DA", "IDH-MUT"))
+> de_table <- topTags(de_results, n = Inf)$table  # Get all results
+> 
+> de_table$log2FC <- de_table$logFC  # Rename for clarity
+> 
+> ggplot(de_table, aes(x = log2FC, y = -log10(PValue))) +
++   geom_point(aes(color = PValue < 0.05), alpha = 0.6) +
++   scale_color_manual(values = c("black", "red")) +
++   geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "blue") +
++   labs(title = "Volcano Plot: Differential Expression (EdgeR)",
++        x = "Log2 Fold Change", y = "-log10 P-value") +
++   theme_minimal()
+> write.csv(de_table, "EdgeR_DE_results.csv")
+
+> sig_threshold <- 0.05
+> 
+> # Count significantly upregulated and downregulated genes
+> num_upregulated <- sum(de_table$PValue < sig_threshold & de_table$log2FC > 0)
+> num_downregulated <- sum(de_table$PValue < sig_threshold & de_table$log2FC < 0)
+> num_significant <- num_upregulated + num_downregulated
+> 
+> # Print Summary
+> cat("Differential Expression Summary:\n")
+Differential Expression Summary:
+> cat("Total significantly expressed genes:", num_significant, "\n")
+Total significantly expressed genes: 2275 
+> cat(" - Upregulated genes:", num_upregulated, "\n")
+ - Upregulated genes: 1259 
+> cat(" - Downregulated genes:", num_downregulated, "\n")
+ - Downregulated genes: 1016 
+> 
+> # Define significance threshold
+> sig_threshold <- 0.05
+> 
+> # Count significantly upregulated and downregulated genes
+> num_upregulated <- sum(de_table$PValue < sig_threshold & de_table$log2FC > 1)
+> num_downregulated <- sum(de_table$PValue < sig_threshold & de_table$log2FC < -1)
+> num_significant <- num_upregulated + num_downregulated
+> 
+> # Print Summary
+> cat("Differential Expression Summary:\n")
+Differential Expression Summary:
+> cat("Total significantly expressed genes:", num_significant, "\n")
+Total significantly expressed genes: 1540 
+> cat(" - Upregulated genes:", num_upregulated, "\n")
+ - Upregulated genes: 658 
+> cat(" - Downregulated genes:", num_downregulated, "\n")
+ - Downregulated genes: 882 
+> 
+> # Load Required Library
+> library(pheatmap)
+> 
+> # Select Top 50 DE Genes
+> top50_genes <- rownames(head(de_table[order(de_table$PValue), ], 50))
+> 
+> # Extract Log-transformed CPM values for these genes
+> heatmap_data <- cpm(dge, log=TRUE)[top50_genes, ]
+> 
+> # Create Sample Annotation
+> annotation_col <- data.frame(Group = group)
+> rownames(annotation_col) <- colnames(heatmap_data)
+> 
+> # Define Color Palette
+> ann_colors <- list(Group = c("IDH-MUT" = "red", "DA" = "blue"))
+> 
+> # Generate Heatmap
+> pheatmap(heatmap_data, 
++          scale = "row",  # Normalize across rows
++          clustering_distance_rows = "euclidean",
++          clustering_distance_cols = "euclidean",
++          clustering_method = "average",
++          annotation_col = annotation_col,
++          annotation_colors = ann_colors,
++          color = colorRampPalette(c("blue", "white", "red"))(50),
++          main = "Heatmap of Top 50 Differentially Expressed Genes")
