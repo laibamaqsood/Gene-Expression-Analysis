@@ -1,0 +1,149 @@
+> data <- read.csv("F:/combined_RNAs.csv", row.names = 1)
+> idh_mut_samples <- c("DA06", "DA01", "DA05", "GB07")
+> da_samples <- grep("^DA", rownames(data), value = TRUE)
+> da_samples <- setdiff(da_samples, idh_mut_samples)
+> group <- factor(ifelse(rownames(data) %in% idh_mut_samples, "IDH-MUT", "DA"))
+> 
+> dge <- DGEList(counts = t(data), group = group)
+library(edgeR)
+Loading required package: limma
+Warning message:
+package ‘limma’ was built under R version 4.1.3 
+> 
+> dge <- DGEList(counts = t(data), group = group)
+> 
+> keep <- rowMeans(dge$counts) >= 10
+> dge <- dge[keep, , keep.lib.sizes=FALSE]
+> dge <- calcNormFactors(dge)
+> dge <- estimateDisp(dge)
+Using classic mode.
+> 
+> de_results <- exactTest(dge, pair = c("DA", "IDH-MUT"))
+> de_table <- topTags(de_results, n = Inf)$table  # Get all results
+> 
+> de_table$log2FC <- de_table$logFC  # Rename for clarity
+> 
+> ggplot(de_table, aes(x = log2FC, y = -log10(PValue))) +
++   geom_point(aes(color = PValue < 0.05), alpha = 0.6) +
++   scale_color_manual(values = c("black", "red")) +
++   geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "blue") +
++   labs(title = "Volcano Plot: Differential Expression (EdgeR)",
++        x = "Log2 Fold Change", y = "-log10 P-value") +
++   theme_minimal()
+> write.csv(de_table, "EdgeR_DE_results.csv")
+
+> sig_threshold <- 0.05
+> 
+> # Count significantly upregulated and downregulated genes
+> num_upregulated <- sum(de_table$PValue < sig_threshold & de_table$log2FC > 0)
+> num_downregulated <- sum(de_table$PValue < sig_threshold & de_table$log2FC < 0)
+> num_significant <- num_upregulated + num_downregulated
+> 
+> # Print Summary
+> cat("Differential Expression Summary:\n")
+Differential Expression Summary:
+> cat("Total significantly expressed genes:", num_significant, "\n")
+Total significantly expressed genes: 2275 
+> cat(" - Upregulated genes:", num_upregulated, "\n")
+ - Upregulated genes: 1259 
+> cat(" - Downregulated genes:", num_downregulated, "\n")
+ - Downregulated genes: 1016 
+> 
+> # Define significance threshold
+> sig_threshold <- 0.05
+> 
+> # Count significantly upregulated and downregulated genes
+> num_upregulated <- sum(de_table$PValue < sig_threshold & de_table$log2FC > 1)
+> num_downregulated <- sum(de_table$PValue < sig_threshold & de_table$log2FC < -1)
+> num_significant <- num_upregulated + num_downregulated
+> 
+> # Print Summary
+> cat("Differential Expression Summary:\n")
+Differential Expression Summary:
+> cat("Total significantly expressed genes:", num_significant, "\n")
+Total significantly expressed genes: 1540 
+> cat(" - Upregulated genes:", num_upregulated, "\n")
+ - Upregulated genes: 658 
+> cat(" - Downregulated genes:", num_downregulated, "\n")
+ - Downregulated genes: 882 
+> 
+> # Load Required Library
+> library(pheatmap)
+> 
+> # Select Top 50 DE Genes
+> top50_genes <- rownames(head(de_table[order(de_table$PValue), ], 50))
+> 
+> # Extract Log-transformed CPM values for these genes
+> heatmap_data <- cpm(dge, log=TRUE)[top50_genes, ]
+> 
+> # Create Sample Annotation
+> annotation_col <- data.frame(Group = group)
+> rownames(annotation_col) <- colnames(heatmap_data)
+> 
+> # Define Color Palette
+> ann_colors <- list(Group = c("IDH-MUT" = "red", "DA" = "blue"))
+> 
+> # Generate Heatmap
+> pheatmap(heatmap_data, 
++          scale = "row",  # Normalize across rows
++          clustering_distance_rows = "euclidean",
++          clustering_distance_cols = "euclidean",
++          clustering_method = "average",
++          annotation_col = annotation_col,
++          annotation_colors = ann_colors,
++          color = colorRampPalette(c("blue", "white", "red"))(50),
++          main = "Heatmap of Top 50 Differentially Expressed Genes")
+
+
+newwwwwwwwwwwww
+data <- t(data)
+> idh_mut_samples <- c("DA06", "DA01", "DA05", "GB07")  # IDH-MUT samples
+> da_samples <- grep("^DA", colnames(data), value = TRUE)  # Select DA samples
+> da_samples <- setdiff(da_samples, idh_mut_samples)  # Remove IDH-MUT from DA
+> 
+> # Ensure only selected samples exist in the dataset
+> selected_samples <- c(idh_mut_samples, da_samples)
+> selected_samples <- selected_samples[selected_samples %in% colnames(data)]
+> 
+> # Subset data
+> data_subset <- data[, selected_samples, drop = FALSE]
+> 
+> data_subset <- as.matrix(data_subset)  # Convert to matrix
+> mode(data_subset) <- "numeric"  # Ensure values are numeric
+> data_subset[is.na(data_subset)] <- 0  # Replace NA with 0
+> 
+> library(edgeR)
+> 
+> # Define sample groups again after transposing
+> group <- factor(ifelse(colnames(data_subset) %in% idh_mut_samples, "IDH-MUT", "DA"))
+> 
+> # EdgeR Processing
+> dge <- DGEList(counts = data_subset, group = group)
+> keep <- rowMeans(dge$counts) >= 10
+> dge <- dge[keep, , keep.lib.sizes=FALSE]
+> dge <- calcNormFactors(dge)
+> 
+> # Model design
+> design <- model.matrix(~ group)
+> dge <- estimateDisp(dge, design)
+> 
+> # Perform differential expression analysis
+> de_results <- exactTest(dge, pair = c("DA", "IDH-MUT"))
+> de_table <- topTags(de_results, n = Inf)$table
+> 
+> # Select Top 50 Differentially Expressed Genes
+> top50_genes <- rownames(head(de_table[order(de_table$PValue), ], 50))
+> heatmap_data <- cpm(dge, log=TRUE)[top50_genes, selected_samples]
+> 
+> # Plot Heatmap
+> library(pheatmap)
+> pheatmap(heatmap_data, 
++          scale = "row", 
++          clustering_method = "average", 
++          annotation_col = data.frame(Group = group), 
++          color = colorRampPalette(c("blue", "white", "red"))(50),
++          main = "Heatmap: Top 50 Differentially Expressed Genes (IDH-MUT vs DA)")
+Error in check.length("fill") : 
+  'gpar' element 'fill' must not be length 0
+> 
+> print(head(de_table))  # Check if differential expression results exist
